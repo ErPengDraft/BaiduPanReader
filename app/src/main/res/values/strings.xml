@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">随心阅</string>
+    <string name="get_token">获取百度登陆授权</string>
+</resources>
