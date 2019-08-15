@@ -1,5 +1,7 @@
 package com.example.lbaidupan;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.List;
 
 import lombok.Data;
@@ -8,7 +10,9 @@ import lombok.Data;
 public class BaseListBean<T> {
     private int errno;
     private int guid;
-    private String guid_info;
+    @SerializedName("guid_info")
+    private String guidInfo;
     private List<T> list;
-    private long request_id;
+    @SerializedName("request_id")
+    private long requestId;
 }

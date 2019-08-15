@@ -5,28 +5,39 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
+
+import lombok.Setter;
+import lombok.val;
 
 public class PageAdapter extends RecyclerView.Adapter<PageAdapter.MyViewHolder> {
     private List<PanFile> panFiles;
+
+    @Setter
+    private OnItemClickListener listener;
 
     public PageAdapter(List<PanFile> myDataset) {
         panFiles = myDataset;
     }
 
+    @NonNull
     @Override
-    public PageAdapter.MyViewHolder onCreateViewHolder(ViewGroup parent,
+    public PageAdapter.MyViewHolder onCreateViewHolder(@NonNull ViewGroup parent,
                                                        int viewType) {
         // create a new view
         View root = LayoutInflater.from(parent.getContext()).inflate(R.layout.pan_file_item, parent, false);
-        return new MyViewHolder(root);
+        return new MyViewHolder(root, this);
     }
 
     @Override
-    public void onBindViewHolder(MyViewHolder holder, int position) {
-        holder.textView.setText(panFiles.get(position).getServerFilename());
+    public void onBindViewHolder(@NonNull MyViewHolder holder, int position) {
+        holder.filename.setText(panFiles.get(position).getServerFilename());
+        holder.type.setText(panFiles.get(position).isDir() ? "文件夹" : "文件");
+        holder.process.setText(panFiles.get(position).getProcessStr());
     }
 
     @Override
@@ -35,10 +46,29 @@ public class PageAdapter extends RecyclerView.Adapter<PageAdapter.MyViewHolder> 
     }
 
     static class MyViewHolder extends RecyclerView.ViewHolder {
-        TextView textView;
-        MyViewHolder(View root) {
+        TextView filename;
+        TextView type;
+        TextView process;
+        WeakReference<PageAdapter> mAdapter;
+
+        MyViewHolder(View root, final PageAdapter adapter) {
             super(root);
-            textView = root.findViewById(R.id.filename);;
+            filename = root.findViewById(R.id.filename);
+            type = root.findViewById(R.id.type);
+            process = root.findViewById(R.id.progress);
+
+            this.mAdapter = new WeakReference<>(adapter);
+
+            root.setOnClickListener(v -> {
+                val pos = getAdapterPosition();
+                if (mAdapter.get() != null && mAdapter.get().listener != null) {
+                    mAdapter.get().listener.onItemClick(mAdapter.get().panFiles.get(pos), pos);
+                }
+            });
         }
+    }
+
+    interface OnItemClickListener {
+        void onItemClick(PanFile panFile, int pos);
     }
 }

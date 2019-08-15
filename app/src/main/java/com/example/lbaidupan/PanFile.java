@@ -3,35 +3,38 @@ package com.example.lbaidupan;
 import com.google.gson.annotations.SerializedName;
 
 import lombok.Data;
-import lombok.Getter;
 
 @Data
 public class PanFile {
-    /*
-    {
-        "category": 6,
-        "unlist": 0,
-        "fs_id": 367516000038625,
-        "dir_empty": 0,
-        "oper_id": 3389535607,
-        "server_ctime": 1541510747,
-        "local_mtime": 1541510747,
-        "size": 0,
-        "share": 0,
-        "isdir": 1,
-        "path": "/baidu/test",
-        "local_ctime": 1541510747,
-        "server_filename": "test",
-        "empty": 0,
-        "server_mtime": 1541510747
-    }
-    */
-
     @SerializedName("fs_id")
-    private String fsId;
+    private long fsId;
 
     @SerializedName("server_filename")
     private String serverFilename;
 
     private String md5;
+    private int isdir; /* 是否目录，0 文件、1 目录 */
+    private String path;
+    // private boolean isDownload;
+    private int process = -1;
+
+    public boolean isDir() {
+        return isdir == 1;
+    }
+
+    public String getProcessStr() {
+        if (isDir()) {
+            return "";
+        }
+
+        if (process == -1) {
+            return "网盘文件";
+        } else if (process == 101) {
+            return "本地";
+        } else if (0 <= process && process <= 100) {
+            return process + "%";
+        }
+        return "";
+    }
+
 }

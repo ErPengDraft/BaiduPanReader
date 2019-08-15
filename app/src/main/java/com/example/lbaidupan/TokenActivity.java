@@ -18,7 +18,6 @@ public class TokenActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.token_activity);
 
-        MMKV.initialize(this);
         val kv = MMKV.defaultMMKV();
 
         findViewById(R.id.button).setOnClickListener(v -> {
