@@ -35,8 +35,17 @@ public class PageAdapter extends RecyclerView.Adapter<PageAdapter.MyViewHolder> 
 
     @Override
     public void onBindViewHolder(@NonNull MyViewHolder holder, int position) {
-        holder.filename.setText(panFiles.get(position).getServerFilename());
-        holder.type.setText(panFiles.get(position).isDir() ? "文件夹" : "文件");
+        val panFile = panFiles.get(position);
+        holder.filename.setText(panFile.getServerFilename());
+        holder.type.setText(panFile.isDir() ? "文件夹" : "文件");
+
+        if (panFile.getProcess() == 101) {
+            val md5 = CustomUtils.getFileMD5(holder.itemView.getContext(), panFile.getPath());
+            if (md5 == null || !md5.equals(panFile.getMd5())) {
+                panFile.setProcess(-1);
+            }
+        }
+
         holder.process.setText(panFiles.get(position).getProcessStr());
     }
 

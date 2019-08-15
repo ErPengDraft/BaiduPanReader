@@ -8,6 +8,8 @@ import com.tencent.mmkv.MMKV;
 import java.io.File;
 import java.io.FileInputStream;
 import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
 
 import lombok.val;
 import lombok.var;
@@ -16,6 +18,7 @@ public class CustomUtils {
 
     public static String PAN = "pan";
     public static String panPath = null;
+    public static Map<String, String> md5Map = new HashMap<>();
 
     public static boolean haveFile(Context context, String subpath) {
         return haveFile(context, subpath, false);
@@ -79,20 +82,15 @@ public class CustomUtils {
     }
 
     public static String getFileMD5(File file, boolean isForce) {
-//        if (!file.isFile()) {
-//            return null;
-//        }
+        val MD5 = file.getAbsolutePath();
+        var md5 = md5Map.get(MD5);
 
-        val MD5 = file.getAbsolutePath() + "_MD5";
-        val kv = MMKV.defaultMMKV();
-
-        var md5 = kv.getString(MD5, null);
-        if (!isForce && md5 != null) {
+        if (!isForce) {
             return md5;
         }
 
         if (!file.exists()) {
-            kv.remove(MD5);
+            md5Map.remove(MD5);
             return null;
         }
 
@@ -111,12 +109,12 @@ public class CustomUtils {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        kv.putString(MD5, md5);
+        md5Map.put(MD5, md5);
         return md5;
     }
 
     public static String bytesToHexString(byte[] src) {
-        StringBuilder stringBuilder = new StringBuilder("");
+        StringBuilder stringBuilder = new StringBuilder();
         if (src == null || src.length <= 0) {
             return null;
         }

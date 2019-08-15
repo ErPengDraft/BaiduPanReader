@@ -5,7 +5,9 @@ import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.LongSparseArray;
+import android.view.View;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -15,6 +17,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.gson.Gson;
@@ -23,7 +26,10 @@ import com.tencent.mmkv.MMKV;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -55,6 +61,9 @@ public class PanActivity extends AppCompatActivity {
     private BiMap<Long, Long> fsIdToDownloadId;
     private LongSparseArray<PanFile> downloadToFile = new LongSparseArray<>();
 
+    private LinkedList<String> path = new LinkedList<>();
+    private Map<String, Cache> cache = new HashMap<>();
+
     private String token;
 
     @Override
@@ -68,10 +77,11 @@ public class PanActivity extends AppCompatActivity {
         // todo remove
         // kv.remove(FS_ID_TO_DOWNLOAD_ID);
 
-        fsIdToDownloadId =  HashBiMap.create();
+        fsIdToDownloadId = HashBiMap.create();
         val json = kv.getString(FS_ID_TO_DOWNLOAD_ID, null);
         if (json != null) {
-            Map<Long, Long> map = gson.fromJson(json, new TypeToken<Map<Long, Long>>(){}.getType());
+            Map<Long, Long> map = gson.fromJson(json, new TypeToken<Map<Long, Long>>() {
+            }.getType());
             fsIdToDownloadId.putAll(map);
         }
 
@@ -89,8 +99,6 @@ public class PanActivity extends AppCompatActivity {
 
         val mAdapter = new PageAdapter(panFileList);
         mAdapter.setListener((panFile, pos) -> {
-            System.out.println(panFile.getServerFilename());
-            // todo application/epub+zip
             if (!panFile.isDir()) {
                 val file = CustomUtils.file(PanActivity.this, panFile.getPath(), panFile.getMd5(), true);
                 if (file != null) {
@@ -124,7 +132,7 @@ public class PanActivity extends AppCompatActivity {
                             // todo 重复直接删除
 
                             if (fsIdToDownloadId.containsKey(fileMeta.getFsId())) {
-                                Toast.makeText(PanActivity.this, "正在下载", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(PanActivity.this, "正在下载, 请等待下载完成", Toast.LENGTH_SHORT).show();
                                 return;
                             }
 
@@ -146,50 +154,86 @@ public class PanActivity extends AppCompatActivity {
                     }
                 });
             } else {
-                Toast.makeText(PanActivity.this, "是文件夹", Toast.LENGTH_SHORT).show();
                 // todo 添加文件夹翻看功能 与旧数据缓存功能
+                cache();
+                path.add(panFile.getServerFilename());
+                getFileList();
             }
 
         });
         recyclerView.setAdapter(mAdapter);
 
         refresh = findViewById(R.id.refresh);
-        refresh.setOnRefreshListener(this::getFileList);
-        refresh.setRefreshing(true);
-        getFileList();
+        refresh.setOnRefreshListener(() -> this.getFileList(true));
+
+        path.add("Learn");
+        path.add("Books");
+
+        getFileList(true);
     }
 
     private void getFileList() {
-        panService.fileList(token, "/Learn/Books").enqueue(new Callback<BaseListBean<PanFile>>() {
-            @Override
-            public void onResponse(@NonNull Call<BaseListBean<PanFile>> call, @NonNull Response<BaseListBean<PanFile>> response) {
-                panFileList.clear();
-                panFileList.addAll(Objects.requireNonNull(response.body()).getList());
-                for (val file : panFileList) {
-                    if (!file.isDir()) {
-                        if (CustomUtils.haveFile(PanActivity.this, file.getPath(), file.getMd5(), false)) {
-                            file.setProcess(101);
-                        }
-                        val downloadId = fsIdToDownloadId.get(file.getFsId());
-                        if (downloadId != null) {
-                            put(downloadId, file);
-                        }
-                    }
+        getFileList(false);
+    }
+
+    private void getFileList(boolean isForce) {
+        if (!refresh.isRefreshing()) {
+            refresh.setRefreshing(true);
+        }
+
+        String dir = currentDir();
+        setTitle(dir);
+        val currentCache = cache.get(dir);
+        if (isForce || currentCache == null) {
+            panService.fileList(token, dir).enqueue(new Callback<BaseListBean<PanFile>>() {
+                @Override
+                public void onResponse(@NonNull Call<BaseListBean<PanFile>> call, @NonNull Response<BaseListBean<PanFile>> response) {
+                    refresh(Objects.requireNonNull(response.body()).getList(), 0, 0);
                 }
 
-                // 更新状态如果所有任务暂停了
-                downloadObserver.onChange(true);
-                Objects.requireNonNull(recyclerView.getAdapter()).notifyDataSetChanged();
-                refresh.setRefreshing(false);
+                @Override
+                public void onFailure(@NonNull Call<BaseListBean<PanFile>> call, @NonNull Throwable t) {
+                    Toast.makeText(PanActivity.this, "获取失败", Toast.LENGTH_SHORT).show();
+                    t.printStackTrace();
+                    refresh.setRefreshing(false);
+                }
+            });
+        } else {
+            refresh(currentCache.getFiles(), currentCache.getLastPosition(), currentCache.getLastOffset());
+
+        }
+
+    }
+
+    private void refresh(List<PanFile> panFiles, int lastPosition, int lastOffset) {
+        new Thread(() -> {
+            val start = System.currentTimeMillis();
+            panFileList.clear();
+            panFileList.addAll(panFiles);
+            for (val file : panFileList) {
+                if (!file.isDir()) {
+                    if (CustomUtils.haveFile(PanActivity.this, file.getPath(), file.getMd5(), true)) {
+                        file.setProcess(101);
+                    }
+                    val downloadId = fsIdToDownloadId.get(file.getFsId());
+                    if (downloadId != null) {
+                        put(downloadId, file);
+                    }
+                }
             }
 
-            @Override
-            public void onFailure(@NonNull Call<BaseListBean<PanFile>> call, @NonNull Throwable t) {
-                Toast.makeText(PanActivity.this, "获取失败", Toast.LENGTH_SHORT).show();
-                t.printStackTrace();
+            // 更新状态如果所有任务暂停了
+            downloadObserver.onChange(true);
+
+            System.out.println(System.currentTimeMillis() - start);
+
+            runOnUiThread(() -> {
+                Objects.requireNonNull(recyclerView.getAdapter()).notifyDataSetChanged();
+                ((LinearLayoutManager)recyclerView.getLayoutManager()).scrollToPositionWithOffset(lastPosition, lastOffset);
                 refresh.setRefreshing(false);
-            }
-        });
+            });
+
+        }).start();
     }
 
     private long lastTime = System.currentTimeMillis();
@@ -221,14 +265,41 @@ public class PanActivity extends AppCompatActivity {
 
     public void updateUI(PanFile panFile) {
         runOnUiThread(() -> {
-            val pos = panFileList.indexOf(panFile);
-            Objects.requireNonNull(recyclerView.getAdapter()).notifyItemChanged(pos);
+            if (panFile == null) {
+                Objects.requireNonNull(recyclerView.getAdapter()).notifyDataSetChanged();
+            } else {
+                val pos = panFileList.indexOf(panFile);
+                Objects.requireNonNull(recyclerView.getAdapter()).notifyItemChanged(pos);
+            }
         });
+    }
+
+    public String currentDir() {
+        return "/" + Joiner.on('/').join(path);
+    }
+
+    public void cache() {
+        cache(false);
+    }
+
+    public void cache(boolean toTop) {
+
+        val topView = recyclerView.getLayoutManager().getChildAt(0); //获取可视的第一个view
+        val lastOffset = toTop ? 0 : topView.getTop(); //获取与该view的顶部的偏移量
+        val lastPosition = toTop ? 0 : recyclerView.getLayoutManager().getPosition(topView);  //得到该View的数组位置
+        cache.put(currentDir(), new Cache(lastPosition, lastOffset, new ArrayList<>(panFileList)));
     }
 
     @Override
     public void onBackPressed() {
-        moveTaskToBack(true);
+        if (path.size() > 0) {
+            cache(true);
+            path.removeLast();
+            getFileList();
+        } else {
+            moveTaskToBack(true);
+        }
+
     }
 
     @Override
@@ -267,8 +338,7 @@ public class PanActivity extends AppCompatActivity {
                 val soFar = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
                 val all = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-                val progress = (int)(soFar * 100 / all);
-                System.out.println(progress);
+                val progress = (int) (soFar * 100 / all);
 
                 downloadIdsSet.remove(id);
 
@@ -303,15 +373,20 @@ public class PanActivity extends AppCompatActivity {
                 }
                 removeByDownloadId(id);
             }
+            if (downloadIdsSet.size() > 0) {
+                updateUI(null);
+            }
 
             saveJson(false);
         }
     }
-}
 
-@Data
-@AllArgsConstructor
-class FsIdMap {
-    private long fsId;
-    private long downloadId;
+    @Data
+    @AllArgsConstructor
+    private
+    class Cache {
+        private int lastPosition;
+        private int lastOffset;
+        private List<PanFile> files;
+    }
 }
