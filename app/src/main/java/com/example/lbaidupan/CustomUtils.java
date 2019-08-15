@@ -20,32 +20,12 @@ public class CustomUtils {
     public static String panPath = null;
     public static Map<String, String> md5Map = new HashMap<>();
 
-    public static boolean haveFile(Context context, String subpath) {
-        return haveFile(context, subpath, false);
-    }
-
     public static boolean haveFile(Context context, String subpath, boolean isForce) {
         return haveFile(context, subpath, null, isForce);
     }
 
-    public static boolean haveFile(Context context, String subpath, String md5) {
-        return haveFile(context, subpath, md5, false);
-    }
-
     public static boolean haveFile(Context context, String subpath, String md5, boolean isForce) {
         return file(context, subpath, md5, isForce) != null;
-    }
-
-    public static File file(Context context, String subpath) {
-        return file(context, subpath, null, false);
-    }
-
-    public static File file(Context context, String subpath, boolean isForce) {
-        return file(context, subpath, null, isForce);
-    }
-
-    public static File file(Context context, String subpath, String md5) {
-        return file(context, subpath, md5, false);
     }
 
     public static File file(Context context, String subpath, String md5, boolean isForce) {
